@@ -61,12 +61,12 @@ class CPM(object):
             print e
             return
         # self.person_keypoints = self.detector.estimate_keypoints(image_cv)
-        candidate, subset = self.detector.estimate_keypoints(image_cv)
-        # keypoints = self.detector.estimate_keypoints(image_cv)
+        # candidate, subset = self.detector.estimate_keypoints(image_cv)
+        people = self.detector.estimate_keypoints(image_cv)
         #### DEBUG ####
         if self.debug:
-            out_image = self.detector.visualize_keypoints(image_cv, candidate, subset)
-            # out_image = self.detector.visualize_keypoints(image_cv, keypoints)
+            # out_image = self.detector.visualize_keypoints(image_cv, candidate, subset)
+            out_image = self.detector.visualize_keypoints(image_cv, people)
             try:
                 image_msg = self.bridge.cv2_to_imgmsg(out_image, "bgr8")
             except CvBridgeError as e:
@@ -79,33 +79,22 @@ class CPM(object):
         # Instantiate detections object
         obj_arr = Poses()
         obj_arr.header = header
-        # obj_arr.objects = self.objects
-        # For each object / keypoint set found in the image:
+        for person in people:
+            msg = Keypoints()
+            msg.nose = person.get('nose', [])
+            msg.neck = person.get('neck', [])
+            msg.right_shoulder = person.get('right_shoulder', [])
+            msg.left_shoulder = person.get('left_shoulder', [])
+            msg.right_elbow = person.get('right_elbow', [])
+            msg.left_elbow = person.get('left_elbow', [])
+            msg.right_wrist = person.get('right_wrist', [])
+            msg.left_wrist = person.get('left_wrist', [])
+            msg.left_eye = person.get('left_eye', [])
+            msg.right_eye = person.get('right_eye', [])
+            msg.left_ear = person.get('left_ear', [])
+            msg.right_ear = person.get('right_ear', [])
+            obj_arr.people.append(msg)
 
-        # for bbox_obj in self.objects:
-        #     if len(bbox_obj) < 1:
-        #         continue
-        #     bbox_obj = bbox_obj[0]
-        #     rospy.loginfo("BBox Obj" + str(bbox_obj))
-        #     msg = Object()
-        #     msg.object_id = bbox_obj[4]
-        #     msg.top_left_x = int(bbox_obj[0])
-        #     msg.top_left_y = int(bbox_obj[1])
-        #     msg.bot_right_x = int(bbox_obj[2])
-        #     msg.bot_right_y = int(bbox_obj[3])
-        #     obj_arr.objects.append(msg)
-        # for bbox_obj in self.objects2:
-        #     if len(bbox_obj) < 1:
-        #         continue
-        #     bbox_obj = bbox_obj[0]
-        #     rospy.loginfo("BBox Obj" + str(bbox_obj))
-        #     msg = Object()
-        #     msg.object_id = bbox_obj[4]
-        #     msg.top_left_x = int(bbox_obj[0])
-        #     msg.top_left_y = int(bbox_obj[1])
-        #     msg.bot_right_x = int(bbox_obj[2])
-        #     msg.bot_right_y = int(bbox_obj[3])
-        #     obj_arr.objects.append(msg)
 
         self.object_pub.publish(obj_arr)
 

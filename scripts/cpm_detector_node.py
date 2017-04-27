@@ -61,11 +61,12 @@ class CPM(object):
             print e
             return
         # self.person_keypoints = self.detector.estimate_keypoints(image_cv)
-        print 'ABOUT TO ESTIMATE KEYPOINTS'
         candidate, subset = self.detector.estimate_keypoints(image_cv)
+        # keypoints = self.detector.estimate_keypoints(image_cv)
         #### DEBUG ####
         if self.debug:
             out_image = self.detector.visualize_keypoints(image_cv, candidate, subset)
+            # out_image = self.detector.visualize_keypoints(image_cv, keypoints)
             try:
                 image_msg = self.bridge.cv2_to_imgmsg(out_image, "bgr8")
             except CvBridgeError as e:

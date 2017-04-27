@@ -6,10 +6,10 @@ Object Detector Object for ROS
 
 import cv2 as cv
 import numpy as np
+import time
 import math
-import caffe
-import matplotlib
 from scipy.ndimage.filters import gaussian_filter
+import caffe
 
 ### Begin Config:
 
@@ -39,7 +39,7 @@ class PoseMachine:
         caffe.set_mode_gpu()
         caffe.set_device(0)
         self.net = caffe.Net(model['deployFile'], model['caffemodel'], caffe.TEST)
-
+        self.scale = 0
         print '\n\nLoaded network {:s}'.format(model['caffemodel'])
 
     def padRightDownCorner(self, img, stride, padValue):
@@ -64,27 +64,27 @@ class PoseMachine:
         return img_padded, pad
 
     def estimate_keypoints(self, input_image):
-        print 'ESTIMATING KEYPOINTS'
-        scale = down_scale * model['boxsize'] / input_image.shape[0]
-        imageToTest = cv.resize(input_image, (0, 0), fx=scale, fy=scale, interpolation=cv.INTER_CUBIC)
+        start_time = time.time()
+        self.scale = down_scale * model['boxsize'] / input_image.shape[0]
+        imageToTest = cv.resize(input_image, (0, 0), fx=self.scale, fy=self.scale, interpolation=cv.INTER_CUBIC)
         imageToTest_padded, pad = self.padRightDownCorner(imageToTest, model['stride'], model['padValue'])
         self.net.blobs['data'].reshape(*(1, 3, imageToTest_padded.shape[0], imageToTest_padded.shape[1]))
         self.net.blobs['data'].data[...] = np.transpose(np.float32(imageToTest_padded[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5;
+        caffe.set_mode_gpu()
+        caffe.set_device(0)
         output_blobs = self.net.forward()
+        print 'CNN time: ', time.time()-start_time
+
         # Visualize detections for each class
         heatmap = np.transpose(np.squeeze(self.net.blobs[output_blobs.keys()[1]].data), (1, 2, 0))  # output 1 is heatmaps
         heatmap = cv.resize(heatmap, (0, 0), fx=model['stride'], fy=model['stride'], interpolation=cv.INTER_CUBIC)
         heatmap = heatmap[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
-        heatmap = cv.resize(heatmap, (input_image.shape[1], input_image.shape[0]), interpolation=cv.INTER_CUBIC)
-
         paf = np.transpose(np.squeeze(self.net.blobs[output_blobs.keys()[0]].data), (1, 2, 0))  # output 0 is PAFs
-        paf = cv.resize(paf, (0, 0), fx=model['stride'], fy=model['stride'], interpolation=cv.INTER_CUBIC)
-        paf = paf[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
-        paf = cv.resize(paf, (input_image.shape[1], input_image.shape[0]), interpolation=cv.INTER_CUBIC)
-
-        all_peaks = []
+        paf = cv.resize(paf, (0,0), fx=model['stride'], fy=model['stride'], interpolation=cv.INTER_CUBIC)
+        paf = paf[:imageToTest_padded.shape[0]-pad[2], :imageToTest_padded.shape[1]-pad[3], :]
         peak_counter = 0
-        for part in range(19 - 1):
+        all_peaks = []
+        for part in range(18):
             map_ori = heatmap[:, :, part]
             map = gaussian_filter(map_ori, sigma=3)
 
@@ -99,17 +99,16 @@ class PoseMachine:
 
             peaks_binary = np.logical_and.reduce(
                 (map >= map_left, map >= map_right, map >= map_up, map >= map_down, map > param['thre1']))
-            peaks = zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0])  # note reverse
+            peaks = zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0]) # note reverse
             peaks_with_score = [x + (map_ori[x[1], x[0]],) for x in peaks]
             id = range(peak_counter, peak_counter + len(peaks))
             peaks_with_score_and_id = [peaks_with_score[i] + (id[i],) for i in range(len(id))]
-
             all_peaks.append(peaks_with_score_and_id)
             peak_counter += len(peaks)
+        print 'Total time for estimation: ', time.time() - start_time
         connection_all = []
         special_k = []
         mid_num = 10
-
         for k in range(len(mapIdx)):
             score_mid = paf[:, :, [x - 19 for x in mapIdx[k]]]
             candA = all_peaks[limbSeq[k][0] - 1]
@@ -208,12 +207,15 @@ class PoseMachine:
             if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
                 deleteIdx.append(i)
         subset = np.delete(subset, deleteIdx, axis=0)
+        candidate[:, 0] *= 1.0 / self.scale
+        candidate[:, 1] *= 1.0 / self.scale
+        print 'Total time for full: ', time.time() - start_time
         return candidate, subset
-
 
     def visualize_keypoints(self, canvas, candidate, subset):
         colors = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0],
-                  [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255],
+                  [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255],
+                  [85, 0, 255],
                   [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
         stickwidth = 4
 
@@ -223,8 +225,8 @@ class PoseMachine:
                 if -1 in index:
                     continue
                 cur_canvas = canvas.copy()
-                Y = candidate[index.astype(int), 0]
-                X = candidate[index.astype(int), 1]
+                Y = candidate[index.astype(int), 0] #* 1.0/self.scale
+                X = candidate[index.astype(int), 1] #* 1.0/self.scale
                 mX = np.mean(X)
                 mY = np.mean(Y)
                 length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
@@ -233,3 +235,35 @@ class PoseMachine:
                 cv.fillConvexPoly(cur_canvas, polygon, colors[i])
                 canvas = cv.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
         return canvas
+        all_peaks = []
+        # for part in range(18):
+        #     map_ori = heatmap[:, :, part]
+        #     map = gaussian_filter(map_ori, sigma=3)
+        #
+        #     map_left = np.zeros(map.shape)
+        #     map_left[1:, :] = map[:-1, :]
+        #     map_right = np.zeros(map.shape)
+        #     map_right[:-1, :] = map[1:, :]
+        #     map_up = np.zeros(map.shape)
+        #     map_up[:, 1:] = map[:, :-1]
+        #     map_down = np.zeros(map.shape)
+        #     map_down[:, :-1] = map[:, 1:]
+        #
+        #     peaks_binary = np.logical_and.reduce(
+        #         (map >= map_left, map >= map_right, map >= map_up, map >= map_down, map > param['thre1']))
+        #     peaks = zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0])  # note reverse
+        #     all_peaks.append(peaks)
+        # print 'Total time for estimation: ', time.time()-start_time
+        # return all_peaks
+
+    # def visualize_keypoints(self, canvas, keypoints):
+    #     colors = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0],
+    #               [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255],
+    #               [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
+    #
+    #     for i in range(18):
+    #         for j in range(len(keypoints[i])):
+    #             x = int(keypoints[i][j][0] * 1.0/self.scale)
+    #             y = int(keypoints[i][j][1] * 1.0/self.scale)
+    #             cv.circle(canvas, (x, y), 5, colors[i], thickness=-1)
+    #     return canvas

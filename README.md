@@ -15,8 +15,8 @@ To actually run the node, launch with:
 roslaunch rail_cpm detector.launch
 ```
 optional flags include 
- *'debug' (true or false)
- *'image_sub_topic_name' which is /kinect/qhd/image_color_rect by default.
+  * 'debug' (true or false)
+  * 'image_sub_topic_name' which is /kinect/qhd/image_color_rect by default.
 
 
 ### Editing things:

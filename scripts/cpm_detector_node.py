@@ -76,7 +76,7 @@ class CPM(object):
             self.image_pub.publish(image_msg)
         #### END DEBUG ####
 
-        # Instantiate detections object
+        # Instantiate poses object
         obj_arr = Poses()
         obj_arr.header = header
         for person in people:

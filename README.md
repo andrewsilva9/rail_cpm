@@ -4,7 +4,7 @@ Notably lacking the models directory (and requiring an absolute path to that mis
 This also expects that caffe is in your $PYTHONPATH, so if it is not then ensure you do the sys.path workaround.
 
 ### What is published?
-This node will publish /rail_cpm/keypoints, which is a list of lists. Each big list is a person, within that there are named lists like 'nose', 'neck', 'left_ear', etc. and each of these correspond to (Y, X) coordinates of that particular feature on that person. For a visualization, run with the debug flag and run:
+This node will publish /rail_cpm/poses, which is a list of people found in the scene. Each pose/person object will have 2 points for every keypoint, the Y and X coordinate. So the pose object will contain "nose_y, nose_x, neck_y, neck_x, right_shoulder_y, right_shoulder_x" and so on. If the keypoint is not found for that person, it is returned as -1.0. It is important to note that (Y, X) corresponds to (Column, Row) in the image. So Y is the number of pixels from the left border, X is the number from the top border. For a visualization, run with the debug flag and run:
 ```
 rosrun image_view image_view image:=/rail_cpm/debug/keypoint_image
 ```
